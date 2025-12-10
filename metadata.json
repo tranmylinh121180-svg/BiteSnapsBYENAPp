@@ -1,0 +1,7 @@
+{
+  "name": "Copy of BiteSnap",
+  "description": "A cute, photo-first food tracker using AI to analyze habits without calorie counting.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
