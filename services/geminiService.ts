@@ -17,8 +17,9 @@ const processFile = async (file: File): Promise<string> => {
 
 export const analyzeFoodImage = async (file: File): Promise<AIAnalysisResult> => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    // Return mock data if no key for demo purposes to prevent app crash
+  
+  // Explicitly check for undefined or string "undefined" which can happen in build processes
+  if (!apiKey || apiKey === "undefined" || apiKey === "") {
     console.warn("No API Key found, returning mock data");
     await new Promise(resolve => setTimeout(resolve, 1500));
     return {
@@ -33,9 +34,10 @@ export const analyzeFoodImage = async (file: File): Promise<AIAnalysisResult> =>
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const base64Data = await processFile(file);
 
   try {
+    const base64Data = await processFile(file);
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: {
@@ -76,17 +78,30 @@ export const analyzeFoodImage = async (file: File): Promise<AIAnalysisResult> =>
     });
 
     if (response.text) {
-        return JSON.parse(response.text) as AIAnalysisResult;
+        // Robust cleaning: remove markdown code blocks if the model adds them
+        const cleanText = response.text.replace(/```json|```/g, '').trim();
+        return JSON.parse(cleanText) as AIAnalysisResult;
     }
-    throw new Error("No response text");
+    throw new Error("No response text from AI");
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Analysis Error:", error);
+    
+    let errorMessage = "Couldn't quite identify this. Try another angle?";
+    
+    // Surface specific API errors to the user UI for debugging
+    if (error.message) {
+        if (error.message.includes('403')) errorMessage = "API Key invalid or restricted (403). Check Vercel Env Vars.";
+        else if (error.message.includes('429')) errorMessage = "Quota exceeded (429). You are snapping too fast!";
+        else if (error.message.includes('500')) errorMessage = "Google AI service error (500). Try again.";
+        else if (error.message.includes('JSON')) errorMessage = "AI response format error. Please retry.";
+    }
+
     // Fallback for demo stability
     return {
       foodName: "Unknown Dish",
       tags: ["Food"],
-      insight: "Couldn't quite identify this, but hope it tastes good!",
+      insight: errorMessage,
       healthyScore: 5,
       isFried: false,
       isSweet: false,
